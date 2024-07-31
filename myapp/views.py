@@ -3,19 +3,19 @@ import openai
 import speech_recognition as sr
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import render
 import os
 import logging
-logging.basicConfig(level=logging.INFO)
 import json
 import wave
 import contextlib
 
+# OPENAI_API_KEY = Update with your openAI key here or set it as an env variable
+
+logging.basicConfig(level=logging.INFO)
+
 
 def index(request):
-    # Path to the directory containing audio files
     audio_dir = os.path.join('dataset', 'wavs')
-    # List all .wav files in the directory
     audio_files = [f for f in os.listdir(audio_dir) if f.endswith('.wav')]
     audio_files2 = [f for f in os.listdir(audio_dir) if f.endswith('.mp3')]
 
@@ -37,14 +37,16 @@ def transcribe_audio(audio_file_path):
         return f"Could not request results from Google Speech Recognition service; {e}"
 
 
-def get_transcription(audiopath,current_time):
+def get_transcription(audiopath,current_time,summary):
         
-        audio_file_path = audiopath  # Update with your actual audio file path
+        audio_file_path = audiopath  
         with contextlib.closing(wave.open(audio_file_path, 'r')) as wav_file:
             duration = wav_file.getnframes() / float(wav_file.getframerate())
 
-        start_time = max(current_time - 10, 0)
-        # end_time = min(current_time + 10, duration)
+        if summary==True :
+            start_time = 0
+        else:
+            start_time = max(current_time - 10, 0)
         end_time = current_time
         recognizer = sr.Recognizer()
 
@@ -63,8 +65,9 @@ def get_transcription(audiopath,current_time):
             segment_file.writeframes(frames)
 
         transcription = transcribe_audio(segment_path)
-        os.remove(segment_path)  # Clean up the temporary segment file
+        # os.remove(segment_path)  
         return transcription
+
 
 def simplify_transcript(transcript, api_key):
     openai.api_key = api_key
@@ -98,6 +101,22 @@ def resimplify_transcript(transcript, api_key):
     simplified_text = completion.choices[0].message.content
     return simplified_text
 
+def get_emojis(transcript, api_key):
+    openai.api_key = api_key
+
+    completion = openai.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {
+                "role": "user",
+                "content": f"summarize this description with 4 emojis :\n\n{transcript}",
+            },
+        ],
+    )
+    
+    emojis = completion.choices[0].message.content
+    return emojis
+
 def get_keywords(transcript, api_key):
     openai.api_key = api_key
 
@@ -115,20 +134,19 @@ def get_keywords(transcript, api_key):
 
     input_string = keywords.strip('"')
     
-    # Split by '", "'
     items = input_string.split('", "')
     
-    # Remove any remaining quotes from each item
     items = [item.strip('"') for item in items]
     
     return items
-    
+
+
 
 @csrf_exempt
 def generate_images(request):
     import requests
     import base64
-    openai.api_key = 'sk-proj-mDWo2yFcSUmamcoFdqwYT3BlbkFJPeBkbX2X7E5EPT7INrDF'
+    openai.api_key = OPENAI_API_KEY
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
@@ -145,10 +163,9 @@ def generate_images(request):
                     prompt=word,
                     n=1,
                     size="256x256",
-                    response_format="url"  # Ensure the response format is URL
+                    response_format="url"  
                 )
             
-                # The response should be accessed correctly
                 image_url = response.data[0].url
                 print(image_url)
                 image_urls.append(image_url)
@@ -163,59 +180,73 @@ def generate_images(request):
         
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
-# @csrf_exempt
-# def generate_images(request):
-#     import requests
-#     import base64
-#     openai.api_key = 'sk-proj-mDWo2yFcSUmamcoFdqwYT3BlbkFJPeBkbX2X7E5EPT7INrDF'
-#     if request.method == 'POST':
-#         try:
-#             data = json.loads(request.body)
-#             transcript = data.get('text')
-            
-#             response = openai.images.generate(
-#                 prompt=transcript,
-#                 n=1,
-#                 size="256x256",
-#                 response_format="url"  # Ensure the response format is URL
-#             )
-            
-#             # The response should be accessed correctly
-#             image_url = response.data[0].url
-            
-#             return JsonResponse({'image_url': image_url})
-#         except json.JSONDecodeError:
-#             return JsonResponse({'error': 'Invalid JSON in request body'}, status=400)
-#         except KeyError:
-#             return JsonResponse({'error': 'Unexpected response structure'}, status=500)
-#         except Exception as e:
-#             return JsonResponse({'error': str(e)}, status=500)
+@csrf_exempt
+def summary(request):
+    openai.api_key = OPENAI_API_KEY
+    if request.method == 'POST':
+        try:
+            body = json.loads(request.body)
+            currentTime = body.get('currentTime')
+
+            audio_path = os.path.join('dataset', 'wavs', "littlewomen.wav")
+            logging.info(f"Audio file received: {audio_path}")
+
+            if not os.path.exists(audio_path):
+                logging.error(f"Audio file not found: {audio_path}")
+                return JsonResponse({'error': 'Audio file not found {audio_path}'}, status=404)
+
+            api_key = OPENAI_API_KEY
+
+            transcription = get_transcription(audio_path,currentTime,True)
+
+            summary = get_summary(transcription,openai.api_key)
+            data = {
+                'summary': summary
+            }
+            return JsonResponse(data)
         
-#     return JsonResponse({'error': 'Invalid request method'}, status=400)
+        except json.JSONDecodeError:
+            logging.error("Failed to decode JSON from request body.")
+            return JsonResponse({'error': 'Invalid JSON, audio path is:'}, status=400)
+        except Exception as e:
+            logging.exception("An error occurred while processing the request.")
+            return JsonResponse({'error': 'An error occurred', 'details': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+def get_summary(transcript, api_key):
+    openai.api_key = api_key
+
+    completion = openai.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {
+                "role": "user",
+                "content": f"generate a summary of the story so far. make it as simple as possible:\n\n{transcript}",
+            },
+        ],
+    )
+    
+    simplified_text = completion.choices[0].message.content
+    return simplified_text
 
 @csrf_exempt
 def transcript(request):
     if request.method == 'POST':
         try:
             body = json.loads(request.body)
-            # audio_file = body.get('audio_file')
             currentTime = body.get('currentTime')
-            # if not audio_file:
-            #     logging.error("No audio file specified in the request.")
-            #     return JsonResponse({'error': 'No audio file specified'}, status=400)
 
-            audio_path = os.path.join('dataset', 'wavs', "HarryPotter.wav")
+            audio_path = os.path.join('dataset', 'wavs', "littlewomen.wav")
             logging.info(f"Audio file received: {audio_path}")
 
-            # Check if the file exists
             if not os.path.exists(audio_path):
                 logging.error(f"Audio file not found: {audio_path}")
                 return JsonResponse({'error': 'Audio file not found {audio_path}'}, status=404)
 
-            api_key = 'sk-proj-mDWo2yFcSUmamcoFdqwYT3BlbkFJPeBkbX2X7E5EPT7INrDF'
+            api_key =OPENAI_API_KEY
 
-            # Transcribe the audio file
-            transcription = get_transcription(audio_path,currentTime)
+            transcription = get_transcription(audio_path,currentTime,False)
 
             data = {
                 'original': transcription
@@ -235,27 +266,19 @@ def transcript(request):
 def simplify(request):
     if request.method == 'POST':
         try:
-            # Ensure the body is properly decoded from JSON
             body = json.loads(request.body)
-            # audio_file = body.get('audio_file')
             currentTime = body.get('currentTime')
-            # if not audio_file:
-            #     logging.error("No audio file specified in the request.")
-            #     return JsonResponse({'error': 'No audio file specified'}, status=400)
 
-            audio_path = os.path.join('dataset', 'wavs', "HarryPotter.wav")
+            audio_path = os.path.join('dataset', 'wavs', "littlewomen.wav")
             logging.info(f"Audio file received: {audio_path}")
 
-            # Check if the file exists
             if not os.path.exists(audio_path):
                 logging.error(f"Audio file not found: {audio_path}")
                 return JsonResponse({'error': 'Audio file not found {audio_path}'}, status=404)
 
-            api_key = 'sk-proj-mDWo2yFcSUmamcoFdqwYT3BlbkFJPeBkbX2X7E5EPT7INrDF'
+            api_key = OPENAI_API_KEY
 
-            # Transcribe the audio file
-            transcription = get_transcription(audio_path,currentTime)
-            # Simplify the transcript
+            transcription = get_transcription(audio_path,currentTime,False)
             simplified_transcription = simplify_transcript(transcription, api_key)
             data = {
                 'original': transcription,
@@ -276,11 +299,10 @@ def simplify(request):
 def resimplify(request):
     if request.method == 'POST':
         try:
-            # Ensure the body is properly decoded from JSON
             body = json.loads(request.body)
             simplified = body.get('text')
 
-            api_key = 'sk-proj-mDWo2yFcSUmamcoFdqwYT3BlbkFJPeBkbX2X7E5EPT7INrDF'
+            api_key = OPENAI_API_KEY
 
             simplified_transcription = resimplify_transcript(simplified, api_key)
             data = {
@@ -301,11 +323,10 @@ def resimplify(request):
 def keywords(request):
     if request.method == 'POST':
         try:
-            # Ensure the body is properly decoded from JSON
             body = json.loads(request.body)
             simplified = body.get('text')
 
-            api_key = 'sk-proj-mDWo2yFcSUmamcoFdqwYT3BlbkFJPeBkbX2X7E5EPT7INrDF'
+            api_key = OPENAI_API_KEY
 
             keywords = get_keywords(simplified, api_key)
             data = {
@@ -321,4 +342,29 @@ def keywords(request):
             return JsonResponse({'error': 'An error occurred', 'details': str(e)}, status=500)
     
     return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+@csrf_exempt
+def generate_emojis(request):
+    if request.method == 'POST':
+        try:
+            body = json.loads(request.body)
+            simplified = body.get('text')
+
+            api_key = OPENAI_API_KEY
+
+            emojis = get_emojis(simplified, api_key)
+            data = {
+                'content': emojis
+            }
+            return JsonResponse(data)
+
+        except json.JSONDecodeError:
+            logging.error("Failed to decode JSON from request body.")
+            return JsonResponse({'error': 'Invalid JSON, audio path is:'}, status=400)
+        except Exception as e:
+            logging.exception("An error occurred while processing the request.")
+            return JsonResponse({'error': 'An error occurred', 'details': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=400)
+
 

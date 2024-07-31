@@ -7,29 +7,26 @@
     <title>My Simple Page</title>
     <link rel="stylesheet" type="text/css" href="{% static 'myapp/styles.css' %}">
     <script>
-        // Define the static base URL dynamically using Django's static template tag
         const staticBaseURL = "{% static 'myapp/' %}";
     </script>
 </head>
 <body class="centered-content">
     <br><br>
     <img src="{% static 'myapp/logo.png' %}" alt="My Image" width="300" height="100">
-    <!-- <h2>Audio Files</h2>
-    <ul id="audio-list">
-        {% for audio_file in audio_files %}
-            <li><a href="#" class="audio-file" data-file="{{ audio_file }}">{{ audio_file }}</a></li>
-        {% endfor %}
-    </ul> -->
     <br>
+    <br>
+    <div id=summary>
+    <p> <strong>Summary</strong></p>
+    <button id="play-audio-btn3"> Play Audio </button><br><br>
+    <div id="summaryContainer" class="text-box"></div>
+    </div>
     <br>
     <div class="music-player">
         <h3 id="song-title">Pick an audio</h3>
-        <audio id="audio-player" src="{% static 'myapp/HarryPotter.wav' %}"></audio>
+        <audio id="audio-player" src="{% static 'myapp/littlewomen.wav' %}"></audio>
         <div class="controls">
-            <!-- <button id="backward">-10s</button> -->
             <button id="play-pause">Play</button>
             <button id="reset">Reset</button>
-            <!-- <button id="forward">+10s</button> -->
             <div class="time-and-bar">
                 <span id="current-time">0:00</span>
                 <input type="range" id="progress-bar" value="0" max="100" onchange="seekProgress()">
@@ -45,6 +42,7 @@
     
         <br>
         <button id="simplify-btn">Simplify</button>
+        <button id="play-audio-btn2"> Play Audio </button>
     </div>
     <div id="simplify-transcript">
         <br>
@@ -59,10 +57,14 @@
         <br>
         <button id="keyword-btn"> generate keywords</button><br><br>
         <div id="keyword-container"></div><br>
-        <button id="img-btn"> generate image </button><br><br>
+        <button id="img-btn"> generate image </button>
+        <button id="emoji-btn"> generate emojis </button><br><br>
     </div>
-    <div id="generated-image-container"></div>
+    <div id="generated">
+        <div id="generated-emoji-container"></div>
+        <div id="keyword-image-container"></div>
+        <div id="generated-image-container"></div>
+    </div>
     <script src="{% static 'myapp/script.js' %}"></script>
-    <!-- <script src="{% static 'myapp/transcriptions.js' %}"></script> -->
 </body>
 </html>

@@ -8,22 +8,28 @@ document.addEventListener('DOMContentLoaded', function() {
     const songTitleDisplay = document.getElementById('song-title');
     const simplifyButton = document.getElementById('simplify-btn');
     const resimplifyButton = document.getElementById('re-simplify-btn');
-    // const audioList = document.getElementById('audio-list');
     const playBtn = document.getElementById('play-audio-btn');
-    // const backwardButton = document.getElementById('backward');
-    // const forwardButton = document.getElementById('forward');
+    const playBtn2 = document.getElementById('play-audio-btn2');
+    const playBtn3 = document.getElementById('play-audio-btn3');
     const transcriptBtn = document.getElementById('transcript-btn');
+    const summaryBtn = document.getElementById('summary');
     const keywordsBtn = document.getElementById('keyword-btn');
     const imageBtn = document.getElementById('img-btn');
+    const emojiBtn = document.getElementById('emoji-btn');
     const generatedImageContainer = document.getElementById('generated-image-container');
-
+    const generatedEmojiContainer = document.getElementById('generated-emoji-container');
+    const keywordImageContainer = document.getElementById('keyword-image-container');
+    let keyword=[]
     let simplified="";
+    let transcript="";
+    let summary="";
+    let summaryInterval;
+    let fetchController = null;
 
     // Set the song title from the file name
     const audioSrc = audioPlayer.src;
-    // const fileName = audioSrc.substring(audioSrc.lastIndexOf('/') + 1);
-    const fileName = "Harry Potter and the Half Blood Prince - Chapter 1"
-    let fileFetch="harrypotter";
+    const fileName = "Little women - Chapter 1 - Louisa May Alcott"
+    let fileFetch="littlewomen";
     const title = fileName.split('.')[0];
     songTitleDisplay.textContent = title;
 
@@ -60,14 +66,6 @@ document.addEventListener('DOMContentLoaded', function() {
         totalTimeDisplay.textContent = formatTime(audioPlayer.duration);
     });
 
-    // backwardButton.addEventListener('click', function() {
-    //     audioPlayer.currentTime = Math.max(0, audioPlayer.currentTime - 10);
-    // });
-
-    // forwardButton.addEventListener('click', function() {
-    //     audioPlayer.currentTime = Math.min(audioPlayer.duration, audioPlayer.currentTime + 10);
-    // });
-
     function seekTo() {
         let seekto = audioPlayer.duration * (progressBar.value / 100);
         audioPlayer.currentTime = seekto;
@@ -80,8 +78,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     transcriptBtn.addEventListener('click', function() {
-        // const fileName = target.getAttribute('data-file');
-        // Fetch transcription and simplified text from the backend
         fetch('/transcript/', 
         {
             method: 'POST',
@@ -93,15 +89,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         )
         .then(response => {
-            console.log("Received response:", response); // Debugging
+            console.log("Received response:", response); 
             return response.json();
         })
         .then(data => {
-            console.log("Parsed response data:", data); // Debugging
-            // originalTranscription.textContent = data.transcription;
-            // simplifiedTranscription.textContent = data.simplified_transcription;
-            // document.getElementById('original-transcription').textContent =  data.transcription;
-            // document.getElementById('simplified-transcription').textContent = data.simplified_transcription;
+            console.log("Parsed response data:", data); 
             var myDiv = document.getElementById('main-transcript');
             if (myDiv.style.display === 'none' || myDiv.style.display === '') {
                 myDiv.style.display = 'block';
@@ -110,14 +102,69 @@ document.addEventListener('DOMContentLoaded', function() {
             if (myDiv2.style.display === 'block' ) {
                 myDiv2.style.display = 'none';
             } 
+            var myDiv3 = document.getElementById('generated');
+            myDiv3.style.display = 'none';
+
             generatedImageContainer.innerHTML =''
             document.getElementById('original-transcription').textContent = data.original;
-            document.getElementById('keyword-container').textContent = ''
-            // document.getElementById('simplified-transcription').textContent = data.simplified;
-            // simplified=data.simplified;
-        
+            document.getElementById('keyword-container').textContent = '';
+            document.getElementById('generated-emoji-container').textContent = '';
+            document.getElementById('keyword-image-container').textContent = '';
+            document.getElementById('keyword-image-container').innerHTML = '';
+            document.getElementById('generated-emoji-container').innerHTML = '';
+            transcript=data.original;
         })
         .catch(error => console.error('Error:', error));
+    });
+
+    function generateSummary() {
+        if (!audioPlayer.paused) { 
+            const currentTime = audioPlayer.currentTime;
+            fetchController = new AbortController();
+            fetch('/summary/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': getCookie('csrftoken') 
+                },
+                signal: fetchController.signal,
+                body: JSON.stringify({ currentTime: currentTime })
+            })
+            .then(response => response.json())
+            .then(data => {
+                var myDiv = document.getElementById('summary');
+                if (myDiv.style.display === 'none' || myDiv.style.display === '') {
+                    myDiv.style.display = 'block';
+                }
+                document.getElementById('summaryContainer').innerText = data.summary;
+                summary=data.summary;
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    }
+
+    //start summary generation when audio starts playing
+    audioPlayer.addEventListener('play', function() {
+        summaryInterval = setInterval(generateSummary, 15000);
+    });
+
+    //stop summary generation when audio pauses or stops
+    audioPlayer.addEventListener('pause', function() {
+        clearInterval(summaryInterval);
+
+        if (fetchController) {
+            fetchController.abort();
+            fetchController = null;
+        }
+    });
+
+    audioPlayer.addEventListener('ended', function() {
+        clearInterval(summaryInterval);
+
+        if (fetchController) {
+            fetchController.abort();
+            fetchController = null;
+        }
     });
 
     simplifyButton.addEventListener('click', function() {
@@ -150,8 +197,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     resimplifyButton.addEventListener('click', function() {
-        // const fileName = target.getAttribute('data-file');
-        // Fetch transcription and simplified text from the backend
         fetch('/resimplify/', 
         {
             method: 'POST',
@@ -167,12 +212,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return response.json();
         })
         .then(data => {
-            console.log("Parsed response data:", data); // Debugging
-            // originalTranscription.textContent = data.transcription;
-            // simplifiedTranscription.textContent = data.simplified_transcription;
-            // document.getElementById('original-transcription').textContent =  data.transcription;
-            // document.getElementById('simplified-transcription').textContent = data.simplified_transcription;
-            //document.getElementById('original-transcription').textContent = data.original;
+            console.log("Parsed response data:", data); 
             document.getElementById('simplified-transcription').textContent = data.simplified;
             simplified=data.simplified;
         })
@@ -180,8 +220,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     keywordsBtn.addEventListener('click', function() {
-        // const fileName = target.getAttribute('data-file');
-        // Fetch transcription and simplified text from the backend
         fetch('/keywords/', 
         {
             method: 'POST',
@@ -199,10 +237,30 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             console.log("Parsed response data:", data); 
             document.getElementById('keyword-container').textContent = data.simplified;
-            
+            keyword=data.simplified;
+            const originalTranscriptionElement = document.getElementById('original-transcription');
+            const simplifiedTranscriptionElement = document.getElementById('simplified-transcription');
+
+            const originalText = originalTranscriptionElement.textContent;
+            const simplifiedText = simplifiedTranscriptionElement.textContent;
+
+            const underlinedOriginalText = underlineKeywords(originalText, keyword);
+            const underlinedSimplifiedText = underlineKeywords(simplifiedText, keyword);
+
+            originalTranscriptionElement.innerHTML = underlinedOriginalText;
+            simplifiedTranscriptionElement.innerHTML = underlinedSimplifiedText;
         })
         .catch(error => console.error('Error:', error));
     });
+
+    function underlineKeywords(text, keywords) {
+        let underlinedText = text;
+        keywords.forEach(keyword => {
+            const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+            underlinedText = underlinedText.replace(regex, `<u>${keyword}</u>`);
+        });
+        return underlinedText;
+    }
 
     imageBtn.addEventListener('click', function() {
         simplified = document.getElementById('simplified-transcription').textContent;
@@ -217,13 +275,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         )
         .then(response => {
-            console.log("Received response:", response); // Log the response object
-            return response.text();  // Get the raw response text
+            console.log("Received response:", response); 
+            return response.text();  
         })
         .then(responseText => {
-            console.log("Response text:", responseText); // Log the raw response text
-            const data = JSON.parse(responseText); // Attempt to parse the JSON response
+            console.log("Response text:", responseText); 
+            const data = JSON.parse(responseText); 
             if (data.image_urls) {
+                var myDiv3 = document.getElementById('generated');
+                if (myDiv3.style.display === 'none' ) {
+                    myDiv3.style.display = 'block';
+                } 
+                keyword=data.keywords;
+                let keywordsHTML = keyword.join("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
+
+                keywordImageContainer.innerHTML = keywordsHTML;
                 generatedImageContainer.innerHTML = data.image_urls.map(url => `<img src="${url}" alt="Generated Image" width="256" height="256">`).join('            ');
                 document.getElementById('keyword-container').textContent = data.keywords;
             } else {
@@ -239,7 +305,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const cookies = document.cookie.split(';');
             for (let i = 0; i < cookies.length; i++) {
                 const cookie = cookies[i].trim();
-                // Does this cookie string begin with the name we want?
                 if (cookie.substring(0, name.length + 1) === (name + '=')) {
                     cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
                     break;
@@ -248,53 +313,40 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         return cookieValue;
     }
-
-    // Handle audio file click
-    // audioList.addEventListener('click', function(event) {
-    //     event.preventDefault();
-    //     if (event.target.classList.contains('audio-file')) {
-    //         const fileName = event.target.getAttribute('data-file');
-    //         audioPlayer.src = `${staticBaseURL}${fileName}`;
-    //         audioPlayer.pause();
-    //         audioPlayer.currentTime = 0;
-    //         // progressBar.value = 0;
-    //         currentTimeDisplay.textContent = '0:00';
-    //         songTitleDisplay.textContent = fileName.split('.')[0];
-    //         playPauseButton.textContent = 'Play';
-    //         fileFetch=fileName;
-    //         progressBar.value = 0;
-    //         startTimeBar.value = 0;
-    //         totalTimeDisplay.textContent = audioPlayer.duration;
-    //         document.getElementById('original-transcription').textContent = "";
-    //         document.getElementById('simplified-transcription').textContent = "";
-        
-    //     }
-    // });
-    // audioList.addEventListener('click', function(event) {
-    //     event.preventDefault();
-    //     if (event.target.classList.contains('audio-file')) {
-    //         const fileName = event.target.getAttribute('data-file');
-    //         audioPlayer.src = `${staticBaseURL}${fileName}`;
-    //         audioPlayer.pause();
-    //         audioPlayer.currentTime = 0;
-    //         currentTimeDisplay.textContent = '0:00';
-    //         songTitleDisplay.textContent = fileName.split('.')[0];
-    //         playPauseButton.textContent = 'Play';
-    //         fileFetch = fileName;
-    //         // progressBar.value = 0;
-    //         // startTimeBar.value = 0;
-    //         document.getElementById('original-transcription').textContent = "";
-    //         document.getElementById('simplified-transcription').textContent = "";
-    //         generatedImageContainer.innerHTML = "";
     
-    //         // Wait for the metadata to be loaded before updating duration-related elements
-    //         audioPlayer.addEventListener('loadedmetadata', function() {
-    //             totalTimeDisplay.textContent = formatTime(audioPlayer.duration);
-    //         }, { once: true });
-
-    //         resetAudioPlayer();
-    //     }
-    // });
+    emojiBtn.addEventListener('click', function() {
+        simplified = document.getElementById('simplified-transcription').textContent;
+        fetch('/getemoji/', 
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ text: simplified })
+        }
+        )
+        .then(response => {
+            console.log("Received response:", response); 
+            return response.text();  
+        })
+        .then(responseText => {
+            console.log("Response text:", responseText); 
+            const data = JSON.parse(responseText); 
+            if (data.content) {
+                var myDiv3 = document.getElementById('generated');
+                if (myDiv3.style.display === 'none' ) {
+                    myDiv3.style.display = 'block';
+                } 
+                emojis=data.content;
+                document.getElementById('generated-emoji-container').textContent = emojis;
+    
+            } else {
+                console.error('Error:', data.error);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    });
 
     function resetAudioPlayer() {
         audioPlayer.pause();
@@ -304,7 +356,6 @@ document.addEventListener('DOMContentLoaded', function() {
         playPauseButton.textContent = 'Play';
     }
     
-    // Helper function to format time in minutes and seconds
     function formatTime(seconds) {
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = Math.floor(seconds % 60);
@@ -316,23 +367,43 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error("Transcription text is not defined.");
             return;
         }
-        transcription= simplified;
+
         console.log("reading");
-        console.log(transcription);
-        readText(transcription);
+        console.log(simplified);
+        readText(simplified);
+        
+    });
+
+    playBtn2.addEventListener('click', function() {
+        if (!transcript) {
+            console.error("Transcription text is not defined.");
+            return;
+        }
+        console.log("reading");
+        console.log(transcript);
+        readText(transcript);
+        
+    });
+
+    playBtn3.addEventListener('click', function() {
+        if (!summary) {
+            console.error("summary text is not defined.");
+            return;
+        }
+        console.log("reading");
+        console.log(summary);
+        readText(summary);
         
     });
 
     function readText(text) {
         const speechSynthesis = window.speechSynthesis;
         const speech = new SpeechSynthesisUtterance(text);
-    
-        // Customizations
+
         speech.lang = 'en-US';
-        speech.pitch = 0.8; // Slightly higher pitch
-        speech.rate = 0.5; // Normal speed
-        speech.volume = 1.0; // Full volume
-        // speech.voice = "Google UK English Male (en-GB)";
+        speech.pitch = 0.8; 
+        speech.rate = 0.5; 
+        speech.volume = 1.0; 
         speechSynthesis.speak(speech);
     }
     
